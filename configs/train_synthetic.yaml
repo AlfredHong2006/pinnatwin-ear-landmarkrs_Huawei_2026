@@ -1,0 +1,29 @@
+# Role B — synthetic smoke test (stage 5).
+# Needs nothing from Role A or Role C. Purpose: prove forward, backward,
+# checkpoint save/load all work. Success = train loss falls, no NaN.
+
+mode: synthetic
+n_points: 2048
+n_synthetic_train: 256
+n_synthetic_val: 64
+
+in_dim: 3
+n_landmarks: 85
+point_dim1: 64
+point_dim2: 128
+point_dim3: 256
+head_dim1: 512
+head_dim2: 256
+dropout: 0.0          # off: we WANT it to fit the fake data
+
+epochs: 30
+batch_size: 16
+lr: 0.001
+weight_decay: 0.0
+loss: smooth_l1
+beta: 0.05
+
+seed: 0
+out_dir: outputs/role_b
+run_name: synthetic_smoke
+num_workers: 0

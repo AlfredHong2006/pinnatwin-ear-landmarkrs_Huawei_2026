@@ -1,0 +1,36 @@
+# Role B — the tiny-overfit gate (stage 9). Run this BEFORE any full training.
+#
+# Trains on the first 6 cached training ears only, no augmentation, no dropout.
+# The model SHOULD memorise them almost perfectly (train_mee -> ~0).
+#
+# If it does NOT, you have a bug, not a modelling problem. Check in order:
+#   1. canonical coordinate scale     (points should sit in roughly [-1, 1])
+#   2. target construction            (targets - template, right way round?)
+#   3. tensor ordering                ([B,N,F] vs [B,F,N])
+#   4. template version               (did you load C's shared canonical one?)
+#   5. mirror axis                    (A froze mirror_side=right, mirror_axis=1)
+# Do NOT respond by making the network bigger.
+
+mode: cache
+cache_dir: cache
+split_file: configs/split_seed42.json
+template_file: outputs/role_c/canonical_template_shared.npz
+template_version: B1-shared-canonical
+limit_train_ears: 6
+n_points: 2048
+
+in_dim: 3
+n_landmarks: 85
+dropout: 0.0            # no regularisation: we WANT memorisation
+
+epochs: 500
+batch_size: 6
+lr: 0.001
+weight_decay: 0.0
+loss: smooth_l1
+beta: 0.05
+
+seed: 0
+out_dir: outputs/role_b
+run_name: overfit_tiny
+num_workers: 0

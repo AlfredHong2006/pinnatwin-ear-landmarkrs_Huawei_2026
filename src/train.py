@@ -46,6 +46,7 @@ from src.evaluate import landmark_errors, summarize_errors
 from src.geometry import N_LANDMARKS, N_POINTS, inverse_transform_points
 
 # --- our own --------------------------------------------------------------
+from src.augment import AugmentConfig, augment_ear
 from src.losses import get_loss_fn, mean_euclidean_error
 from src.model import EarLandmarkNet
 
@@ -104,6 +105,14 @@ class TrainConfig:
     loss: str = "smooth_l1"                  # "smooth_l1" | "l1" | "mse"
     beta: float = 0.05
 
+    # augmentation (train split only; off by default — see src/augment.py)
+    augment: bool = False
+    aug_rotation_deg: float = 5.0
+    aug_scale_min: float = 0.95
+    aug_scale_max: float = 1.05
+    aug_jitter_std: float = 0.0
+    aug_dropout_frac: float = 0.0
+
     # bookkeeping
     seed: int = 0
     out_dir: str = "outputs/role_b"
@@ -122,6 +131,16 @@ class TrainConfig:
             "head_dim2": self.head_dim2,
             "dropout": self.dropout,
         }
+
+    def aug_config(self) -> AugmentConfig:
+        return AugmentConfig(
+            enabled=self.augment,
+            rotation_deg=self.aug_rotation_deg,
+            scale_min=self.aug_scale_min,
+            scale_max=self.aug_scale_max,
+            jitter_std=self.aug_jitter_std,
+            dropout_frac=self.aug_dropout_frac,
+        )
 
 
 def load_config(path: str | Path) -> TrainConfig:
@@ -246,6 +265,12 @@ class CanonicalEarCacheDataset(Dataset):
 
     ``qa["targets"]`` only exists when the cache was built with
     ``--with-targets``; a cache without it raises here with that instruction.
+
+    With ``augment`` enabled, each ``__getitem__`` call draws a fresh random
+    view via ``src.augment.augment_ear`` and recomputes the residual against
+    that view instead of returning the precomputed one — see src/augment.py
+    for why rotation/scale must move the target along with the points. Pass
+    ``augment=None`` (the default) for the exact pre-augmentation behaviour.
     """
 
     def __init__(
@@ -255,6 +280,7 @@ class CanonicalEarCacheDataset(Dataset):
         template: torch.Tensor,
         n_points: int = N_POINTS,
         limit: int = 0,
+        augment: AugmentConfig | None = None,
     ) -> None:
         wanted = set(subject_ids)
         entries = [(sid, side, p) for sid, side, p in list_cached(cache_dir) if sid in wanted]
@@ -269,6 +295,7 @@ class CanonicalEarCacheDataset(Dataset):
             entries = entries[:limit]
 
         self.template = template
+        self.augment = augment if augment is not None else AugmentConfig(enabled=False)
         self.meta: list[tuple[str, str]] = []
         self.points: list[torch.Tensor] = []
         self.residuals: list[torch.Tensor] = []
@@ -278,6 +305,7 @@ class CanonicalEarCacheDataset(Dataset):
         self.n_suspicious = 0
 
         template_np = template.numpy().astype(np.float64)
+        self._template_np = template_np
 
         for sid, side, path in entries:
             ear = load_cached_ear(path)
@@ -308,7 +336,14 @@ class CanonicalEarCacheDataset(Dataset):
         return len(self.points)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, int]:
-        return self.points[idx], self.residuals[idx], idx
+        if not self.augment.enabled:
+            return self.points[idx], self.residuals[idx], idx
+
+        points_aug, target_aug = augment_ear(
+            self.points[idx].numpy(), self.targets_canonical[idx], self.augment
+        )
+        residual_aug = (target_aug - self._template_np).astype(np.float32)
+        return torch.from_numpy(points_aug.astype(np.float32)), torch.from_numpy(residual_aug), idx
 
 
 def build_datasets(cfg: TrainConfig) -> tuple[Dataset, Dataset, torch.Tensor | None]:
@@ -334,9 +369,11 @@ def build_datasets(cfg: TrainConfig) -> tuple[Dataset, Dataset, torch.Tensor | N
     train_ids, val_ids = load_split(cfg.split_file)
 
     train_ds = CanonicalEarCacheDataset(
-        cfg.cache_dir, train_ids, template, cfg.n_points, limit=cfg.limit_train_ears
+        cfg.cache_dir, train_ids, template, cfg.n_points,
+        limit=cfg.limit_train_ears, augment=cfg.aug_config(),
     )
-    # limit never applies to validation: a truncated val set is not a val set.
+    # limit and augmentation never apply to validation: a val set must stay
+    # a fixed, honest read of the model, not a moving target.
     val_ds = CanonicalEarCacheDataset(cfg.cache_dir, val_ids, template, cfg.n_points)
     return train_ds, val_ds, template
 

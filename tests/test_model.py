@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 import torch
 
+from src.augment import AugmentConfig, augment_ear
 from src.cache import write_cached_ear
 from src.geometry import N_LANDMARKS, CanonicalEar, EarTransform, inverse_transform_points
 from src.losses import (
@@ -482,3 +483,108 @@ def test_evaluate_global_mm_reports_both_sides(fake_cache):
     assert metrics["left_mean"] is not None
     assert metrics["right_mean"] is not None
     assert len(metrics["per_landmark_mean"]) == 85
+
+
+# ---------------------------------------------------------------------
+# Augmentation
+# ---------------------------------------------------------------------
+
+
+def test_augment_disabled_is_identity():
+    points = np.random.default_rng(0).normal(size=(64, 3))
+    target = np.random.default_rng(1).normal(size=(85, 3))
+    p_aug, t_aug = augment_ear(points, target, AugmentConfig(enabled=False))
+    assert p_aug is points
+    assert t_aug is target
+
+
+def test_augment_rotation_preserves_pairwise_distances():
+    """A rotation must not distort the ear -- only reorient it."""
+    rng = np.random.default_rng(2)
+    points = rng.normal(size=(32, 3))
+    target = rng.normal(size=(85, 3))
+    cfg = AugmentConfig(enabled=True, rotation_deg=30.0, scale_min=1.0, scale_max=1.0)
+    np.random.seed(0)
+    p_aug, _ = augment_ear(points, target, cfg)
+    d_before = np.linalg.norm(points[0] - points[1])
+    d_after = np.linalg.norm(p_aug[0] - p_aug[1])
+    assert d_after == pytest.approx(d_before, rel=1e-6)
+
+
+def test_augment_scale_and_rotation_move_target_consistently():
+    """
+    Fixing rotation_deg=0 and scale=2.0 makes the whole transform a pure,
+    deterministic doubling -- the one case simple enough to assert exactly.
+    """
+    rng = np.random.default_rng(3)
+    points = rng.normal(size=(16, 3))
+    target = rng.normal(size=(85, 3))
+    cfg = AugmentConfig(enabled=True, rotation_deg=0.0, scale_min=2.0, scale_max=2.0)
+    p_aug, t_aug = augment_ear(points, target, cfg)
+    assert np.allclose(p_aug, points * 2.0)
+    assert np.allclose(t_aug, target * 2.0)
+
+
+def test_augment_jitter_changes_points_not_target():
+    rng = np.random.default_rng(4)
+    points = rng.normal(size=(32, 3))
+    target = rng.normal(size=(85, 3))
+    cfg = AugmentConfig(
+        enabled=True, rotation_deg=0.0, scale_min=1.0, scale_max=1.0, jitter_std=0.05
+    )
+    p_aug, t_aug = augment_ear(points, target, cfg)
+    assert not np.allclose(p_aug, points)
+    assert np.allclose(t_aug, target)
+
+
+def test_augment_dropout_resamples_from_existing_points_only():
+    rng = np.random.default_rng(5)
+    points = rng.normal(size=(40, 3))
+    target = rng.normal(size=(85, 3))
+    cfg = AugmentConfig(
+        enabled=True, rotation_deg=0.0, scale_min=1.0, scale_max=1.0, dropout_frac=0.3
+    )
+    p_aug, t_aug = augment_ear(points, target, cfg)
+    original_rows = {tuple(row) for row in points.round(8)}
+    aug_rows = {tuple(row) for row in p_aug.round(8)}
+    assert aug_rows <= original_rows
+    assert np.allclose(t_aug, target)
+
+
+def test_dataset_augmentation_disabled_by_default_matches_precomputed(fake_cache):
+    """Passing augment=None must reproduce the exact old (pre-augmentation) path."""
+    cache_dir, template_path = fake_cache
+    template = load_template(template_path)
+    ds = CanonicalEarCacheDataset(cache_dir, ["P0001"], template, n_points=N_POINTS_TEST)
+    assert ds.augment.enabled is False
+    points, residual, idx = ds[0]
+    assert points is ds.points[0]
+    assert residual is ds.residuals[0]
+
+
+def test_dataset_augmentation_recomputes_residual_against_augmented_target(fake_cache):
+    """
+    rotation_deg=0, scale fixed at 2.0: deterministic enough to assert the
+    exact residual, proving the dataset recomputes against target_aug and
+    never reuses the precomputed (un-augmented) residual.
+    """
+    cache_dir, template_path = fake_cache
+    template = load_template(template_path)
+    aug = AugmentConfig(enabled=True, rotation_deg=0.0, scale_min=2.0, scale_max=2.0)
+    ds = CanonicalEarCacheDataset(
+        cache_dir, ["P0001"], template, n_points=N_POINTS_TEST, augment=aug
+    )
+    points_aug, residual_aug, idx = ds[0]
+    expected_target = ds.targets_canonical[0] * 2.0
+    recovered = residual_aug.numpy() + template.numpy()
+    assert np.allclose(recovered, expected_target, atol=1e-4)
+    assert np.allclose(points_aug.numpy(), ds.points[0].numpy() * 2.0, atol=1e-4)
+
+
+def test_dataset_augmentation_never_applies_to_validation(fake_cache):
+    """build_datasets wires augment only into the training dataset -- this
+    pins the dataset-level contract that a caller must opt in explicitly."""
+    cache_dir, template_path = fake_cache
+    template = load_template(template_path)
+    val_ds = CanonicalEarCacheDataset(cache_dir, ["P0001"], template, n_points=N_POINTS_TEST)
+    assert val_ds.augment.enabled is False

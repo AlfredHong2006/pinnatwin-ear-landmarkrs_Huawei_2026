@@ -1,0 +1,46 @@
+# Role B — first controlled augmentation experiment (stage 11+).
+#
+# Do NOT run this before configs/train.yaml has produced a checkpoint that
+# beats B1 (5.5373 mm val mean) with augmentation OFF. Augmentation is a
+# variance-reduction technique for an already-working model, not a fix for a
+# broken one (docs/ROLE_B_GLOBAL_LANDMARK_MODEL.md: "Augmentation: Only after
+# baseline works.").
+#
+# Same setup as train.yaml, with conservative augmentation turned on for the
+# training split only (src/train.py never augments validation).
+
+mode: cache
+cache_dir: cache
+split_file: configs/split_seed42.json
+template_file: outputs/role_c/canonical_template_shared.npz
+template_version: B1-shared-canonical
+limit_train_ears: 0
+n_points: 2048
+
+in_dim: 3
+n_landmarks: 85
+point_dim1: 64
+point_dim2: 128
+point_dim3: 256
+head_dim1: 512
+head_dim2: 256
+dropout: 0.3
+
+epochs: 300
+batch_size: 16
+lr: 0.001
+weight_decay: 0.0001
+loss: smooth_l1
+beta: 0.05
+
+augment: true
+aug_rotation_deg: 5.0     # small: keeps the residual near the non-augmented scale
+aug_scale_min: 0.95
+aug_scale_max: 1.05
+aug_jitter_std: 0.01      # ~0.5mm at the ~55mm canonical scale (DATA_SPEC.md)
+aug_dropout_frac: 0.05
+
+seed: 0
+out_dir: outputs/role_b
+run_name: augmented_seed0
+num_workers: 0

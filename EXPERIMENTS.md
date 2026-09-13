@@ -52,35 +52,105 @@ Use this file for every meaningful training/evaluation run.
 
 ---
 
-## Run Template
+### Run 001 — PointNet baseline (no augmentation)
 
-### Run XXX
-
-- **Date:**
-- **Owner:**
-- **Git commit:**
-- **Config:**
-- **Model:**
-- **Input features:**
-- **Point count:**
-- **Template version:**
-- **Loss:**
-- **Augmentation:**
-- **Seed:**
-- **Epochs:**
-- **Checkpoint path/location:**
+- **Date:** <today's date>
+- **Owner:** Ojas (Role B)
+- **Git commit:** <fill in after committing>
+- **Config:** configs/train.yaml
+- **Model:** EarLandmarkNet, point_dim 64/128/256, head 512/256, dropout 0.3
+- **Input features:** xyz only (in_dim=3)
+- **Point count:** 2048
+- **Template version:** B1-shared-canonical
+- **Loss:** smooth_l1 (beta=0.05)
+- **Augmentation:** off
+- **Seed:** 0
+- **Epochs:** 300
+- **Checkpoint path/location:** outputs/role_b/baseline_seed0_best.pt (git-ignored — share with C/D directly)
 
 #### Validation
-- Mean:
-- Median:
-- P95:
-- Outer helix:
-- Concha:
-- Inner helix:
-- Superior antihelix:
+- Mean: 2.7228 mm
+- Median: 2.5075 mm
+- P95: 5.2836 mm
 
 #### Notes
--
+- Beats B1 canonical-template baseline (5.5373 mm) by 2.8146 mm.
+- Tiny-overfit gate passed first (train_mee -> ~0 on 6 ears), confirming the
+  pipeline (target construction, transform, mirror axis, loss) before this run.
+- train/val loss stayed close throughout (no divergence) — no sign of overfitting
+  despite ~372k params on 320 training ears.
 
 #### Decision
-KEEP / DROP / INVESTIGATE
+KEEP
+
+### Run 002 — PointNet + conservative augmentation
+
+- **Date:** <today>
+- **Owner:** Ojas (Role B)
+- **Git commit:** <fill in after committing>
+- **Config:** configs/train_augmented.yaml
+- **Model:** same as Run 001 (point_dim 64/128/256, head 512/256, dropout 0.3)
+- **Input features:** xyz only
+- **Point count:** 2048
+- **Template version:** B1-shared-canonical
+- **Loss:** smooth_l1 (beta=0.05)
+- **Augmentation:** on (rotation ±5°, scale 0.95-1.05, jitter_std 0.01, dropout_frac 0.05)
+- **Seed:** 0
+- **Epochs:** 300
+- **Checkpoint path/location:** outputs/role_b/augmented_seed0_best.pt
+
+#### Validation
+- Mean: 2.6212 mm (Run 001: 2.7228 mm)
+- Median: 2.3744 mm (Run 001: 2.5075 mm)
+- P95: 5.1502 mm (Run 001: 5.2836 mm)
+
+#### Notes
+- Consistent improvement over Run 001 on mean/median/p95 — augmentation helps.
+- Single seed; effect is modest (~4% relative on mean), worth confirming isn't
+  seed noise before calling it final.
+
+#### Decision
+KEEP
+
+### Run 003 — PointNet + augmentation, seed 1
+
+- **Date:** <today>
+- **Owner:** Ojas (Role B)
+- **Config:** configs/train_augmented.yaml
+- **Seed:** 1
+- **Epochs:** 300
+- **Checkpoint:** outputs/role_b/augmented_seed1_best.pt
+
+#### Validation
+- Mean: 2.6472 mm
+- Median: 2.4411 mm
+- P95: 5.0692 mm
+
+#### Notes
+- Confirms Run 002 (seed 0, 2.6212mm) — augmentation improvement is stable
+  across seeds, not a lucky draw.
+
+#### Decision
+KEEP — augmentation is confirmed beneficial.
+
+### Run 004 — PointNet + augmentation, seed 2
+
+- **Date:** <today>
+- **Owner:** Ojas (Role B)
+- **Config:** configs/train_augmented.yaml
+- **Seed:** 2
+- **Epochs:** 300
+- **Checkpoint:** outputs/role_b/augmented_seed2_best.pt
+
+#### Validation
+- Mean: 2.6998 mm
+- Median: 2.4576 mm
+- P95: 5.3021 mm
+
+#### Notes
+- Third augmented seed. All 3 augmented seeds (2.6212 / 2.6472 / 2.6998)
+  beat the non-augmented run (2.7228) — smaller margin than seeds 0-1, but
+  consistent direction, 3/3.
+
+#### Decision
+KEEP — set complete (3 seeds), ready to hand to Role C/D

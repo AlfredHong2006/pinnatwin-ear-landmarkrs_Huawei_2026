@@ -55,10 +55,10 @@ define a crop, centre, scale, rotation or mirror.
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install numpy trimesh pyyaml matplotlib pytest    # no requirements.txt yet
+pip install numpy trimesh pyyaml matplotlib pytest torch    # torch is needed for Role B/model inference
 $env:HUAWEI_DATA_ROOT = "<path containing mesh/ and landmarks/>"
 
-pytest tests -q                                        # 169 passed, synthetic data only
+pytest tests -q                                        # full suite; see CI output for any pre-existing failures
 
 # 1. data conventions (all 200 meshes)
 python scripts/inspect_dataset.py --max-meshes 0
@@ -98,3 +98,82 @@ Huawei NDA-protected data must not be committed to this repository.
 
 The implementation objective is to establish a complete end-to-end
 PLY → left/right 85×3 landmark pipeline before adding optional features.
+
+
+## Role D — inference and reproduction
+
+Role D owns the runnable path from an unseen PLY to two validated `85 x 3`
+arrays in the original Huawei coordinate frame. The runtime is intentionally
+small and consumes Role A/B/C interfaces rather than duplicating their logic.
+
+### One-command fallback smoke test
+
+`configs/infer.yaml` is deliberately configured for the train-only global-mean
+fallback. The fallback artifact is produced by Role C and is NDA-derived, so it
+is not committed to Git.
+
+```bash
+python -m src.infer \
+  --input /path/to/P0001.ply \
+  --config configs/infer.yaml \
+  --output predictions/
+```
+
+The command writes `predictions/P0001.npz` containing:
+
+```python
+{
+    "subject_id": "P0001",
+    "left":  np.ndarray((85, 3)),
+    "right": np.ndarray((85, 3)),
+}
+```
+
+For inspection, `--format both` also writes `P0001_left.csv` and
+`P0001_right.csv` using the repository's verified `idx,[x y z]` row notation.
+The NPZ is the canonical reproducibility artifact.
+
+### Learned-model inference
+
+When a Role B checkpoint has been selected by the team, use the same command
+with the checkpoint override:
+
+```bash
+python -m src.infer \
+  --input /path/to/P0001.ply \
+  --config configs/infer.yaml \
+  --mode model \
+  --checkpoint outputs/role_b/augmented_seed0_best.pt \
+  --output predictions/
+```
+
+The checkpoint is validated before inference for its stored architecture,
+`n_points`, `n_landmarks`, `in_dim`, template version and residual-prediction
+contract. Multiple compatible checkpoints can be supplied by repeating
+`--checkpoint`; their residual predictions are averaged. This is an orchestration
+feature only; the choice to retain an ensemble remains a C/B experiment decision.
+
+Test-time multi-sample averaging is available through `tta_samples` in the Role D
+config, but the shipped default is `1`. It should only be raised after Role C has
+validated the setting. C-owned post-processing is likewise disabled by default;
+when enabled later, D calls C's `apply_enabled_postprocessing` hook instead of
+reimplementing projection/refinement logic.
+
+### Inference assumptions and boundaries
+
+Inference uses only the supplied mesh and frozen runtime artifacts. It never
+loads the training landmark CSVs and therefore does not use ground truth to crop,
+centre, scale, mirror or sample points.
+
+The public Huawei Topic Description specifies separate left/right sets of 85
+landmarks, but the accessible public page does not publish a filename or binary
+serialization schema for the evaluator. The repository therefore keeps its NPZ
+writer as a deterministic internal/reproduction format; only the final platform
+wrapper should change if the private submission instructions specify another
+container format.
+
+Run the D-focused integration suite with:
+
+```bash
+pytest tests/test_pipeline.py -q
+```

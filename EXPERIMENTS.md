@@ -154,3 +154,23 @@ KEEP — augmentation is confirmed beneficial.
 
 #### Decision
 KEEP — set complete (3 seeds), ready to hand to Role C/D
+
+---
+
+## Role D — runtime integration record
+
+- Runtime entry point: `python -m src.infer`
+- Runtime config: `configs/infer.yaml`
+- Public API: `src.pipeline.predict_subject(mesh_path, config)`
+- Output contract: `left` and `right`, each `[85,3]`, finite, original Huawei frame
+- Fallback artifact: Role C `outputs/role_c/global_template.npz`
+- Learned-model artifact contract: Role B checkpoint format v2 via `src.train.load_checkpoint`
+- Canonical template: Role C `outputs/role_c/canonical_template_shared.npz`
+- A interface: `load_mesh`, `load_crop_config`, `canonicalize_ear`, `inverse_transform_points`
+- No annotations are read during inference.
+- Run 002 / Run 003 / Run 004 are compatible Role B candidate checkpoints; the current
+  experiment log does **not** record a final single-checkpoint or ensemble decision, so
+  Role D does not invent one. The checkpoint is supplied explicitly in the runtime config
+  or CLI override once B/C select the exact run.
+- C-owned post-processing remains disabled until its implementation and validation are
+  present; D only provides the integration hook.

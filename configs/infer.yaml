@@ -1,0 +1,18 @@
+# Role D runtime configuration.
+# Safe starting point: C's train-only global mean fallback.
+# Switch mode to "model" and supply a real Role B checkpoint when a validated
+# final run has been selected by the team.
+mode: fallback
+crop_config: configs/crop.yaml
+canonical_template: outputs/role_c/canonical_template_shared.npz
+global_template: outputs/role_c/global_template.npz
+checkpoint: null
+ensemble_checkpoints: []
+n_points: 2048
+mirror_side: right
+mirror_axis: 1
+seed: 0
+device: auto
+tta_samples: 1
+postprocess_enabled: false
+template_version: B1-shared-canonical

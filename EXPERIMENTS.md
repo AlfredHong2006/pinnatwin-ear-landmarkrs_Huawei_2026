@@ -54,9 +54,9 @@ Use this file for every meaningful training/evaluation run.
 
 ### Run 001 — PointNet baseline (no augmentation)
 
-- **Date:** <today's date>
+- **Date:** 2026-09 (on or before 2026-09-13, merged in PR #8)
 - **Owner:** Ojas (Role B)
-- **Git commit:** <fill in after committing>
+- **Git commit:** 0ade00c (role-b; merged to main as badb390)
 - **Config:** configs/train.yaml
 - **Model:** EarLandmarkNet, point_dim 64/128/256, head 512/256, dropout 0.3
 - **Input features:** xyz only (in_dim=3)
@@ -85,9 +85,9 @@ KEEP
 
 ### Run 002 — PointNet + conservative augmentation
 
-- **Date:** <today>
+- **Date:** 2026-09 (on or before 2026-09-13, merged in PR #8)
 - **Owner:** Ojas (Role B)
-- **Git commit:** <fill in after committing>
+- **Git commit:** 0ade00c (role-b; merged to main as badb390)
 - **Config:** configs/train_augmented.yaml
 - **Model:** same as Run 001 (point_dim 64/128/256, head 512/256, dropout 0.3)
 - **Input features:** xyz only
@@ -114,12 +114,12 @@ KEEP
 
 ### Run 003 — PointNet + augmentation, seed 1
 
-- **Date:** <today>
+- **Date:** 2026-09 (on or before 2026-09-13, merged in PR #8)
 - **Owner:** Ojas (Role B)
-- **Config:** configs/train_augmented.yaml
+- **Config:** configs/train_augmented.yaml (seed overridden to 1)
 - **Seed:** 1
 - **Epochs:** 300
-- **Checkpoint:** outputs/role_b/augmented_seed1_best.pt
+- **Checkpoint:** outputs/role_b/augmented_seed0_seed1_best.pt
 
 #### Validation
 - Mean: 2.6472 mm
@@ -135,12 +135,12 @@ KEEP — augmentation is confirmed beneficial.
 
 ### Run 004 — PointNet + augmentation, seed 2
 
-- **Date:** <today>
+- **Date:** 2026-09 (on or before 2026-09-13, merged in PR #8)
 - **Owner:** Ojas (Role B)
-- **Config:** configs/train_augmented.yaml
+- **Config:** configs/train_augmented.yaml (seed overridden to 2)
 - **Seed:** 2
 - **Epochs:** 300
-- **Checkpoint:** outputs/role_b/augmented_seed2_best.pt
+- **Checkpoint:** outputs/role_b/augmented_seed0_seed2_best.pt
 
 #### Validation
 - Mean: 2.6998 mm

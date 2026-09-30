@@ -20,7 +20,19 @@ from src.geometry import N_LANDMARKS, N_POINTS, canonicalize_ear, inverse_transf
 from src.train import load_checkpoint
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = "configs/infer.yaml"
+
+
+def _resolve(path: str | Path) -> Path:
+    """Resolve a relative path against the CWD, falling back to the repo root.
+
+    Lets the evaluator instantiate LandmarkExtractor from any working directory.
+    """
+    p = Path(path)
+    if p.is_absolute() or p.exists():
+        return p
+    return REPO_ROOT / p
 
 
 class LandmarkExtractor:
@@ -35,7 +47,7 @@ class LandmarkExtractor:
     """
 
     def __init__(self, config: str | Path = DEFAULT_CONFIG, device: str | None = None) -> None:
-        self.config_path = Path(config)
+        self.config_path = _resolve(config)
         if not self.config_path.is_file():
             raise FileNotFoundError(f"inference config not found: {self.config_path}")
 
@@ -64,8 +76,8 @@ class LandmarkExtractor:
         if self.mirror_axis not in (0, 1, 2):
             raise ValueError(f"mirror_axis must be 0, 1 or 2, got {self.mirror_axis}")
 
-        self.crop_config_path = Path(cfg.get("crop_config", "configs/crop.yaml"))
-        self.template_path = Path(cfg.get("template_file", "outputs/role_c/canonical_template_shared.npz"))
+        self.crop_config_path = _resolve(cfg.get("crop_config", "configs/crop.yaml"))
+        self.template_path = _resolve(cfg.get("template_file", "outputs/role_c/canonical_template_shared.npz"))
         self.template_version = str(cfg.get("template_version", "B1-shared-canonical"))
         self.seed = int(cfg.get("seed", 0))
 
@@ -82,7 +94,7 @@ class LandmarkExtractor:
             checkpoint_path = cfg.get("checkpoint")
             if not checkpoint_path:
                 raise ValueError(f"{self.config_path}: model mode requires 'checkpoint'")
-            self.model, self.checkpoint = load_checkpoint(checkpoint_path, map_location=self.device)
+            self.model, self.checkpoint = load_checkpoint(_resolve(checkpoint_path), map_location=self.device)
             self.model.to(self.device)
             self.model.eval()
 
